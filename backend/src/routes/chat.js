@@ -1,5 +1,5 @@
 import express from "express";
-import { chatJSON } from "../services/llmService.js";
+import { chatJSON, providerInfo } from "../services/llmService.js";
 import { resolvePanic } from "../services/emotionService.js";
 import {
   computeRiskScore,
@@ -18,6 +18,7 @@ import {
   getProfile,
   updateProfile,
   savePlan,
+  getPlan,
 } from "../services/store.js";
 
 const router = express.Router();
@@ -31,7 +32,7 @@ const CHECKIN_EVERY = 4;
  */
 router.post("/", async (req, res) => {
   try {
-    const { sessionId, message } = req.body || {};
+    const { sessionId, message, thinkMode } = req.body || {};
     if (!sessionId || !message || typeof message !== "string") {
       return res
         .status(400)
@@ -44,11 +45,18 @@ router.post("/", async (req, res) => {
     const user = await getOrCreateUser(sessionId);
     const profile = await getProfile(sessionId);
     const convo = await getConversation(sessionId);
+    const plan = await getPlan(sessionId);
 
     const onboarding = !profile.complete && !isProfileComplete(profile);
-    const systemPrompt = onboarding
+    let systemPrompt = onboarding
       ? ONBOARDING_SYSTEM_PROMPT
       : ADVISOR_SYSTEM_PROMPT;
+
+    // Give the AI full awareness of what the user sees on the dashboard.
+    const dashboardContext = buildDashboardContext(profile, plan);
+    if (dashboardContext) {
+      systemPrompt = `${systemPrompt}\n\n${dashboardContext}`;
+    }
 
     // History trimmed to recent turns to keep token usage low on free models.
     const history = convo.messages
@@ -65,6 +73,7 @@ router.post("/", async (req, res) => {
       history,
       userMessage: message,
       calmMode,
+      thinkMode: Boolean(thinkMode),
     });
 
     // Final panic resolution combines deterministic + LLM judgement.
@@ -133,7 +142,7 @@ router.post("/", async (req, res) => {
       profile: serializeProfile(updatedProfile),
       planBuilt: Boolean(planJustBuilt),
       checkIn,
-      meta: { mock: Boolean(llm._mock), model: process.env.OPENROUTER_MODEL },
+      meta: { mock: Boolean(llm._mock), ...providerInfo(), error: llm._error },
     });
   } catch (err) {
     console.error("chat route error:", err);
@@ -155,6 +164,76 @@ function serializeProfile(p) {
     riskCategory: p.riskCategory ?? null,
     complete: Boolean(p.complete),
   };
+}
+
+const inr = (n) =>
+  typeof n === "number" && !Number.isNaN(n)
+    ? "₹" + Math.round(n).toLocaleString("en-IN")
+    : "—";
+
+/**
+ * Render a plain-text summary of exactly what the user sees on the dashboard,
+ * so the LLM can answer questions about their plan with real, specific numbers.
+ * Returns "" when there is nothing meaningful yet (early onboarding).
+ */
+function buildDashboardContext(profile, plan) {
+  const lines = [];
+
+  const p = profile || {};
+  const profileBits = [];
+  if (p.goals?.length) profileBits.push(`Goals: ${p.goals.join(", ")}`);
+  if (p.horizonYears != null)
+    profileBits.push(`Horizon: ${p.horizonYears} years`);
+  if (p.monthlyIncome != null)
+    profileBits.push(`Monthly income: ${inr(p.monthlyIncome)}`);
+  if (p.monthlyInvestable != null)
+    profileBits.push(`Can invest/month: ${inr(p.monthlyInvestable)}`);
+  if (p.fearTolerance) profileBits.push(`Fear tolerance: ${p.fearTolerance}`);
+  if (p.lifeStage) profileBits.push(`Life stage: ${p.lifeStage}`);
+  if (p.riskCategory)
+    profileBits.push(
+      `Risk profile: ${p.riskCategory}${p.riskScore != null ? ` (score ${p.riskScore}/100)` : ""}`,
+    );
+
+  if (profileBits.length) {
+    lines.push("USER PROFILE:");
+    profileBits.forEach((b) => lines.push(`- ${b}`));
+  }
+
+  if (plan) {
+    lines.push("");
+    lines.push(
+      `INVESTMENT PLAN — "${plan.templateName}"${plan.tagline ? ` (${plan.tagline})` : ""}:`,
+    );
+    if (plan.expectedReturn)
+      lines.push(`- Expected return: ${plan.expectedReturn}`);
+    if (plan.monthlySIP) lines.push(`- Monthly SIP: ${inr(plan.monthlySIP)}`);
+    if (plan.allocation?.length) {
+      lines.push("- Asset allocation:");
+      plan.allocation.forEach((a) => {
+        const examples = a.examples?.length
+          ? ` (e.g. ${a.examples.slice(0, 2).join(", ")})`
+          : "";
+        lines.push(`    • ${a.asset}: ${a.percent}%${examples}`);
+      });
+    }
+    if (plan.milestones?.length) {
+      lines.push("- Milestones:");
+      plan.milestones.forEach((m) => {
+        const yr = m.targetYear ? ` [${m.targetYear}]` : "";
+        lines.push(`    • ${m.label}${yr}${m.done ? " ✓" : ""}`);
+      });
+    }
+  }
+
+  if (!lines.length) return "";
+
+  return [
+    "DASHBOARD CONTEXT — this is the live data the user currently sees on their screen.",
+    "Use it to answer their questions specifically and accurately:",
+    "",
+    ...lines,
+  ].join("\n");
 }
 
 export default router;

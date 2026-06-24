@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { connectDB } from "./config/db.js";
-import { isMockMode } from "./services/llmService.js";
+import { isMockMode, providerInfo } from "./services/llmService.js";
 import chatRoutes from "./routes/chat.js";
 import planRoutes from "./routes/plan.js";
 import profileRoutes from "./routes/profile.js";
@@ -15,7 +15,7 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     mockLLM: isMockMode(),
-    model: process.env.OPENROUTER_MODEL || null,
+    ...providerInfo(),
     time: new Date().toISOString(),
   });
 });
@@ -31,9 +31,10 @@ const PORT = process.env.PORT || 5000;
 (async () => {
   await connectDB(process.env.MONGODB_URI);
   app.listen(PORT, () => {
+    const info = providerInfo();
     console.log(`\n🪙  NiveshMitra backend on http://localhost:${PORT}`);
     console.log(
-      `   LLM mode: ${isMockMode() ? "MOCK (no key)" : process.env.OPENROUTER_MODEL}`,
+      `   LLM: ${info.mock ? "MOCK (no key)" : `${info.provider} → ${info.model}`}`,
     );
   });
 })();

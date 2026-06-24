@@ -27,10 +27,10 @@ async function req(path, options = {}) {
 }
 
 export const api = {
-  sendMessage: (sessionId, message) =>
+  sendMessage: (sessionId, message, thinkMode = false) =>
     req("/chat", {
       method: "POST",
-      body: JSON.stringify({ sessionId, message }),
+      body: JSON.stringify({ sessionId, message, thinkMode }),
     }),
   getPlan: (sessionId) => req(`/plan/${sessionId}`),
   getProfile: (sessionId) => req(`/profile/${sessionId}`),

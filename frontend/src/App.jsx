@@ -3,25 +3,70 @@ import { api, getSessionId, resetSession } from "./api/client.js";
 import MessageBubble from "./components/MessageBubble.jsx";
 import PlanDashboard from "./components/PlanDashboard.jsx";
 
-const GREETING = {
-  role: "assistant",
-  content:
-    "Hi, I'm NiveshMitra 🪙 — think of me as a friend who happens to know about money. " +
-    "No jargon, no judgement. To start: what are you hoping to achieve with your money, " +
-    "and is there a goal that matters most right now?",
-  emotion: { detected: "hopeful", confidence: 0.6 },
-};
+function makeGreeting(name) {
+  const who = name ? `, ${name}` : "";
+  return {
+    role: "assistant",
+    content:
+      `Hi${who}, I'm NiveshMitra 🪙 — think of me as a friend who happens to know about money. ` +
+      "No jargon, no judgement. To start: what are you hoping to achieve with your money, " +
+      "and is there a goal that matters most right now?",
+  };
+}
 
-export default function App() {
+export default function App({ user, theme = "dark", onToggleTheme, onLogout }) {
   const [sessionId] = useState(getSessionId);
-  const [messages, setMessages] = useState([GREETING]);
+  const [messages, setMessages] = useState(() => [makeGreeting(user?.name)]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState(null);
   const [plan, setPlan] = useState(null);
   const [banner, setBanner] = useState(null);
   const [mock, setMock] = useState(false);
+  const [thinkMode, setThinkMode] = useState(
+    () => localStorage.getItem("nm_think") === "1",
+  );
+  const [dashOpen, setDashOpen] = useState(false);
+  const [hasNewPlan, setHasNewPlan] = useState(false);
+  const [dashWidth, setDashWidth] = useState(() => {
+    const saved = Number(localStorage.getItem("nm_dashw"));
+    return saved >= 300 ? saved : 440;
+  });
+  const [dragging, setDragging] = useState(false);
   const scrollRef = useRef(null);
+  const layoutRef = useRef(null);
+
+  // Draggable splitter between chat and dashboard.
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e) => {
+      const rect = layoutRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      let w = rect.right - e.clientX - 18; // account for right padding
+      const max = Math.min(780, rect.width - 380);
+      w = Math.max(300, Math.min(w, max));
+      setDashWidth(w);
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [dragging]);
+
+  useEffect(() => {
+    localStorage.setItem("nm_dashw", String(Math.round(dashWidth)));
+  }, [dashWidth]);
+
+  useEffect(() => {
+    localStorage.setItem("nm_think", thinkMode ? "1" : "0");
+  }, [thinkMode]);
 
   useEffect(() => {
     api
@@ -53,7 +98,7 @@ export default function App() {
     setLoading(true);
     setBanner(null);
     try {
-      const res = await api.sendMessage(sessionId, text);
+      const res = await api.sendMessage(sessionId, text, thinkMode);
       setMessages((m) => [
         ...m,
         {
@@ -88,9 +133,10 @@ export default function App() {
         const p = await api.getPlan(sessionId).catch(() => null);
         if (p?.plan) setPlan(p.plan);
         if (res.planBuilt) {
+          setHasNewPlan(true);
           setBanner({
             type: "success",
-            text: "🎉 Your personalized plan is ready — see the dashboard!",
+            text: "🎉 Your personalized plan is ready — tap “View plan” up top to open it!",
           });
         }
       }
@@ -125,13 +171,52 @@ export default function App() {
         </div>
         <div className="topbar-right">
           {mock && <span className="mock-pill">MOCK LLM</span>}
+          {plan && (
+            <button
+              className={`ghost dash-toggle ${dashOpen ? "active" : ""} ${
+                hasNewPlan && !dashOpen ? "pulse" : ""
+              }`}
+              onClick={() => {
+                setDashOpen((o) => !o);
+                setHasNewPlan(false);
+              }}
+            >
+              {dashOpen ? "Hide plan" : "📊 View plan"}
+              {hasNewPlan && !dashOpen && <span className="new-dot" />}
+            </button>
+          )}
+          <button
+            className="ghost icon-btn"
+            onClick={onToggleTheme}
+            title={
+              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            }
+            aria-label="Toggle theme"
+          >
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
           <button className="ghost" onClick={startOver}>
             Start over
           </button>
+          {user && (
+            <div className="user-chip" title={user.email || user.name}>
+              <span className="user-avatar">
+                {(user.name || "U").trim().charAt(0).toUpperCase()}
+              </span>
+              <button className="ghost logout-btn" onClick={onLogout}>
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="layout">
+      <main
+        className={`layout ${dragging ? "dragging" : ""} ${
+          dashOpen ? "" : "chat-only"
+        }`}
+        ref={layoutRef}
+      >
         <section className="chat-panel">
           {banner && (
             <div className={`banner ${banner.type}`}>{banner.text}</div>
@@ -151,6 +236,20 @@ export default function App() {
             )}
           </div>
           <div className="composer">
+            <button
+              type="button"
+              className={`think-toggle ${thinkMode ? "on" : ""}`}
+              onClick={() => setThinkMode((v) => !v)}
+              title={
+                thinkMode
+                  ? "Think mode ON — deeper reasoning, richer answers"
+                  : "Think mode OFF — fast, concise answers"
+              }
+              aria-pressed={thinkMode}
+            >
+              <span className="think-icon">💡</span>
+              <span className="think-label">Think</span>
+            </button>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -159,7 +258,7 @@ export default function App() {
               rows={1}
             />
             <button onClick={send} disabled={loading || !input.trim()}>
-              Send
+              <span className="send-icon">➤</span>
             </button>
           </div>
           <p className="foot-note">
@@ -168,9 +267,35 @@ export default function App() {
           </p>
         </section>
 
-        <aside className="dash-panel">
-          <PlanDashboard plan={plan} profile={profile} />
-        </aside>
+        {dashOpen && (
+          <div
+            className="resizer"
+            onMouseDown={() => setDragging(true)}
+            onDoubleClick={() => setDashWidth(440)}
+            title="Drag to resize · double-click to reset"
+            role="separator"
+            aria-orientation="vertical"
+          >
+            <span className="resizer-grip" />
+          </div>
+        )}
+
+        {dashOpen && (
+          <aside className="dash-panel" style={{ width: dashWidth }}>
+            <div className="dash-bar">
+              <span className="dash-bar-title">Your dashboard</span>
+              <button
+                className="dash-close"
+                onClick={() => setDashOpen(false)}
+                title="Close dashboard"
+                aria-label="Close dashboard"
+              >
+                ✕
+              </button>
+            </div>
+            <PlanDashboard plan={plan} profile={profile} />
+          </aside>
+        )}
       </main>
     </div>
   );
