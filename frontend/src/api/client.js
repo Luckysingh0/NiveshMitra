@@ -14,6 +14,12 @@ export function resetSession() {
   localStorage.removeItem("nm_session");
 }
 
+// Adopt a server-issued session id (e.g. a stable per-Google-account id) so
+// the frontend and backend agree on which conversation/history to use.
+export function setSessionId(id) {
+  if (id) localStorage.setItem("nm_session", id);
+}
+
 async function req(path, options = {}) {
   const res = await fetch(`/api${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -35,4 +41,19 @@ export const api = {
   getPlan: (sessionId) => req(`/plan/${sessionId}`),
   getProfile: (sessionId) => req(`/profile/${sessionId}`),
   health: () => req("/health"),
+  login: (email, password) =>
+    req("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  saveBasicInfo: (sessionId, info) =>
+    req("/auth/basic-info", {
+      method: "POST",
+      body: JSON.stringify({ sessionId, ...info }),
+    }),
+  googleLogin: (sessionId, credential) =>
+    req("/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ sessionId, credential }),
+    }),
 };

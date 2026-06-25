@@ -26,6 +26,39 @@ export async function getOrCreateUser(sessionId) {
   return mem.users.get(sessionId);
 }
 
+// Upsert identity fields (name/email/googleId/picture) for a session.
+// Only overwrites fields that are actually provided and non-empty.
+export async function setUserIdentity(sessionId, info = {}) {
+  const fields = {};
+  for (const k of [
+    "name",
+    "email",
+    "googleId",
+    "picture",
+    "age",
+    "city",
+    "occupation",
+    "phone",
+    "basicInfoComplete",
+  ]) {
+    if (info[k] != null && info[k] !== "") fields[k] = info[k];
+  }
+  if (isDbConnected()) {
+    return User.findOneAndUpdate(
+      { sessionId },
+      { $set: fields },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  }
+  const existing = mem.users.get(sessionId) || {
+    sessionId,
+    onboardingComplete: false,
+  };
+  Object.assign(existing, fields);
+  mem.users.set(sessionId, existing);
+  return existing;
+}
+
 // ---- Conversations ----
 export async function getConversation(sessionId) {
   if (isDbConnected()) {

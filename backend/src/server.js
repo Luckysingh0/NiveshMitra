@@ -6,6 +6,7 @@ import { isMockMode, providerInfo } from "./services/llmService.js";
 import chatRoutes from "./routes/chat.js";
 import planRoutes from "./routes/plan.js";
 import profileRoutes from "./routes/profile.js";
+import authRoutes from "./routes/auth.js";
 
 const app = express();
 app.use(cors());
@@ -23,6 +24,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/chat", chatRoutes);
 app.use("/api/plan", planRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/auth", authRoutes);
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 

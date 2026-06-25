@@ -52,6 +52,15 @@ router.post("/", async (req, res) => {
       ? ONBOARDING_SYSTEM_PROMPT
       : ADVISOR_SYSTEM_PROMPT;
 
+    // Tell the AI who it's talking to, up front, as a firm fact so it greets
+    // them by name and never asks for their name again.
+    if (user?.name && user.name !== "Friend") {
+      systemPrompt =
+        `IMPORTANT: You are already talking with ${user.name}. ` +
+        `You know their name — greet and address them as ${user.name} naturally, ` +
+        `and never ask what their name is.\n\n${systemPrompt}`;
+    }
+
     // Give the AI full awareness of what the user sees on the dashboard.
     const dashboardContext = buildDashboardContext(profile, plan);
     if (dashboardContext) {

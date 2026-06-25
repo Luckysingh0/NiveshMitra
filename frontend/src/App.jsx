@@ -3,20 +3,16 @@ import { api, getSessionId, resetSession } from "./api/client.js";
 import MessageBubble from "./components/MessageBubble.jsx";
 import PlanDashboard from "./components/PlanDashboard.jsx";
 
-function makeGreeting(name) {
-  const who = name ? `, ${name}` : "";
-  return {
-    role: "assistant",
-    content:
-      `Hi${who}, I'm NiveshMitra 🪙 — think of me as a friend who happens to know about money. ` +
-      "No jargon, no judgement. To start: what are you hoping to achieve with your money, " +
-      "and is there a goal that matters most right now?",
-  };
-}
+const SUGGESTIONS = [
+  "How should I start investing?",
+  "Is SIP better than a fixed deposit?",
+  "The market is falling — should I sell?",
+  "Help me plan for retirement",
+];
 
 export default function App({ user, theme = "dark", onToggleTheme, onLogout }) {
   const [sessionId] = useState(getSessionId);
-  const [messages, setMessages] = useState(() => [makeGreeting(user?.name)]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -90,8 +86,8 @@ export default function App({ user, theme = "dark", onToggleTheme, onLogout }) {
     });
   }, [messages, loading]);
 
-  async function send() {
-    const text = input.trim();
+  async function send(maybeText) {
+    const text = (typeof maybeText === "string" ? maybeText : input).trim();
     if (!text || loading) return;
     setInput("");
     setMessages((m) => [...m, { role: "user", content: text }]);
@@ -159,6 +155,37 @@ export default function App({ user, theme = "dark", onToggleTheme, onLogout }) {
     window.location.reload();
   }
 
+  const hasStarted = messages.some((m) => m.role === "user");
+
+  const composer = (
+    <div className="composer">
+      <button
+        type="button"
+        className={`think-toggle ${thinkMode ? "on" : ""}`}
+        onClick={() => setThinkMode((v) => !v)}
+        title={
+          thinkMode
+            ? "Think mode ON — deeper reasoning, richer answers"
+            : "Think mode OFF — fast, concise answers"
+        }
+        aria-pressed={thinkMode}
+      >
+        <span className="think-icon">💡</span>
+        <span className="think-label">Think</span>
+      </button>
+      <textarea
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={onKey}
+        placeholder="Tell me about your goals, or how you're feeling about the market…"
+        rows={1}
+      />
+      <button onClick={send} disabled={loading || !input.trim()}>
+        <span className="send-icon">➤</span>
+      </button>
+    </div>
+  );
+
   return (
     <div className="app">
       <header className="topbar">
@@ -217,54 +244,66 @@ export default function App({ user, theme = "dark", onToggleTheme, onLogout }) {
         }`}
         ref={layoutRef}
       >
-        <section className="chat-panel">
+        <section className={`chat-panel ${hasStarted ? "" : "empty"}`}>
           {banner && (
             <div className={`banner ${banner.type}`}>{banner.text}</div>
           )}
-          <div className="messages" ref={scrollRef}>
-            {messages.map((m, i) => (
-              <MessageBubble key={i} msg={m} />
-            ))}
-            {loading && (
-              <div className="bubble-row left">
-                <div className="bubble ai typing">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
+
+          {hasStarted ? (
+            <>
+              <div className="messages" ref={scrollRef}>
+                {messages.map((m, i) => (
+                  <MessageBubble key={i} msg={m} />
+                ))}
+                {loading && (
+                  <div className="bubble-row left">
+                    <div className="bubble ai typing">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div className="composer">
-            <button
-              type="button"
-              className={`think-toggle ${thinkMode ? "on" : ""}`}
-              onClick={() => setThinkMode((v) => !v)}
-              title={
-                thinkMode
-                  ? "Think mode ON — deeper reasoning, richer answers"
-                  : "Think mode OFF — fast, concise answers"
-              }
-              aria-pressed={thinkMode}
-            >
-              <span className="think-icon">💡</span>
-              <span className="think-label">Think</span>
-            </button>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKey}
-              placeholder="Tell me about your goals, or how you're feeling about the market…"
-              rows={1}
-            />
-            <button onClick={send} disabled={loading || !input.trim()}>
-              <span className="send-icon">➤</span>
-            </button>
-          </div>
-          <p className="foot-note">
-            Educational only · not registered financial advice. Try: “the market
-            is crashing, should I sell everything?”
-          </p>
+              {composer}
+              <p className="foot-note">
+                Educational only · not registered financial advice. Try: “the
+                market is crashing, should I sell everything?”
+              </p>
+            </>
+          ) : (
+            <div className="empty-hero">
+              <div className="empty-logo">🪙</div>
+              <h2 className="empty-title">
+                {user?.name && user.name !== "Friend"
+                  ? `Hi ${user.name}, `
+                  : "Hi, "}
+                I'm NiveshMitra
+              </h2>
+              <p className="empty-sub">
+                Your empathetic money companion. No jargon, no judgement — ask
+                me anything about your money, or just tell me what's on your
+                mind.
+              </p>
+              {composer}
+              <div className="empty-suggests">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className="suggest-chip"
+                    onClick={() => send(s)}
+                    disabled={loading}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <p className="foot-note">
+                Educational only · not registered financial advice.
+              </p>
+            </div>
+          )}
         </section>
 
         {dashOpen && (

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import App from "./App.jsx";
 import Landing from "./components/Landing.jsx";
 import Login from "./components/Login.jsx";
+import BasicInfo from "./components/BasicInfo.jsx";
 
 function readUser() {
   try {
@@ -11,13 +12,21 @@ function readUser() {
   }
 }
 
+// Where a logged-in user should land: chat if basics are done, else the form.
+function homeView(user) {
+  if (!user) return "landing";
+  return user.basicInfoComplete ? "chat" : "basicinfo";
+}
+
 export default function Root() {
   const initialUser = readUser();
   const [theme, setTheme] = useState(
     () => localStorage.getItem("nm_theme") || "dark",
   );
   const [user, setUser] = useState(initialUser);
-  const [view, setView] = useState(initialUser ? "chat" : "landing");
+  const [view, setView] = useState(() =>
+    initialUser ? homeView(initialUser) : "landing",
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -29,6 +38,13 @@ export default function Root() {
   function handleLogin(u) {
     localStorage.setItem("nm_user", JSON.stringify(u));
     setUser(u);
+    setView(u.basicInfoComplete ? "chat" : "basicinfo");
+  }
+
+  function handleBasicInfoDone(u) {
+    const merged = { ...u, basicInfoComplete: true };
+    localStorage.setItem("nm_user", JSON.stringify(merged));
+    setUser(merged);
     setView("chat");
   }
 
@@ -49,6 +65,17 @@ export default function Root() {
     );
   }
 
+  if (view === "basicinfo" && user) {
+    return (
+      <BasicInfo
+        user={user}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onDone={handleBasicInfoDone}
+      />
+    );
+  }
+
   if (view === "login") {
     return (
       <Login
@@ -64,7 +91,7 @@ export default function Root() {
     <Landing
       theme={theme}
       onToggleTheme={toggleTheme}
-      onStart={() => setView(user ? "chat" : "login")}
+      onStart={() => setView(user ? homeView(user) : "login")}
     />
   );
 }
