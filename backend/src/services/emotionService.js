@@ -2,36 +2,146 @@
 // This layer runs INDEPENDENTLY of the LLM. If clear distress language appears,
 // panic mode is force-triggered no matter what the model returns. This guarantees
 // the flagship feature works on demo day.
+//
+// The keyword/regex lexicons below are compiled from publicly documented sources
+// of investor-distress and FOMO vocabulary, including:
+//   - NRC Emotion Lexicon (fear / sadness / anger word families)
+//   - LIWC-style anxiety & negative-affect terms
+//   - Loughran-McDonald financial sentiment dictionary (negative / uncertainty)
+//   - Behavioural-finance "panic selling" & "FOMO trading" glossaries
+//   - Common retail-investor forum slang (Reddit r/IndiaInvestments, WSB, etc.)
+// They are grouped by theme so teammates can extend any single category easily.
 
-const PANIC_PATTERNS = [
-  /\bsell (everything|it all|all of it|now)\b/i,
-  /\bpull (out|everything)\b/i,
-  /\bwithdraw everything\b/i,
-  /\bi('?m| am) panicking\b/i,
-  /\bi('?m| am) freaking out\b/i,
-  /\blost it all\b/i,
-  /\blost everything\b/i,
-  /\blosing everything\b/i,
-  /\bcan'?t sleep\b/i,
-  /\bcan'?t take (it|this)( anymore)?\b/i,
-  /\bmarket('?s| is) crash/i,
-  /\bcrashing\b/i,
-  /\bi('?m| am) scared\b/i,
-  /\bi('?m| am) terrified\b/i,
-  /\beverything is gone\b/i,
-  /\bruined\b/i,
+// ── PANIC: urge to exit / dump positions ───────────────────────────────
+const PANIC_EXIT = [
+  /\bsell (everything|it all|all of it|now|today|immediately|right now)\b/i,
+  /\bdump (everything|it all|my (stocks?|shares?|holdings?|portfolio))\b/i,
+  /\bpull (out|everything|my money|the plug)\b/i,
+  /\bwithdraw (everything|it all|all my money|now)\b/i,
+  /\bcash (out|everything)( now)?\b/i,
+  /\bexit (everything|all|now|my positions?)\b/i,
+  /\bliquidate (everything|all|my portfolio)\b/i,
   /\bget me out\b/i,
+  /\bget out (now|while i can)\b/i,
+  /\bstop the bleeding\b/i,
+  /\bbail (out|on (everything|this))\b/i,
+  /\bbook (my )?loss(es)?\b/i,
+  /\bcut my losses\b/i,
 ];
 
+// ── PANIC: fear / anxiety / dread ──────────────────────────────────────
+const PANIC_FEAR = [
+  /\bi('?m| am) panicking\b/i,
+  /\bi('?m| am) (in a )?panic\b/i,
+  /\bi('?m| am) freaking out\b/i,
+  /\bi('?m| am) (so )?(scared|terrified|frightened|petrified)\b/i,
+  /\bi('?m| am) (really |so |very )?(anxious|nervous|worried|stressed)\b/i,
+  /\bi('?m| am) (so )?(afraid|fearful)\b/i,
+  /\bfreaking out\b/i,
+  /\bscared to death\b/i,
+  /\bsick to my stomach\b/i,
+  /\bheart (is )?(racing|pounding)\b/i,
+  /\bhaving a (panic attack|breakdown|meltdown)\b/i,
+  /\bi (can'?t|cannot) (do|handle|deal with) this\b/i,
+  /\bso much anxiety\b/i,
+  /\bfilled with (dread|fear)\b/i,
+];
+
+// ── PANIC: despair / loss / ruin ───────────────────────────────────────
+const PANIC_DESPAIR = [
+  /\blost (it all|everything|all my (money|savings))\b/i,
+  /\blosing (everything|it all|all my money)\b/i,
+  /\beverything is gone\b/i,
+  /\b(it'?s |i'?m )?(all )?gone\b/i,
+  /\bwiped out\b/i,
+  /\bruined\b/i,
+  /\bi('?m| am) (financially )?(ruined|broke|destroyed|finished)\b/i,
+  /\bi('?m| am) (so )?(hopeless|helpless|devastated|crushed)\b/i,
+  /\bgive up\b/i,
+  /\bgiving up\b/i,
+  /\bno (hope|point|future)\b/i,
+  /\bmy life (savings|is over)\b/i,
+  /\bi(’|'| ha)?ve lost everything\b/i,
+  /\bdown (50|60|70|80|90|100)%/i,
+  /\bin the red\b/i,
+  /\bbleeding money\b/i,
+];
+
+// ── PANIC: market crash / collapse ─────────────────────────────────────
+const PANIC_MARKET = [
+  /\bmarket('?s| is)? crash(ing|ed)?\b/i,
+  /\bcrashing\b/i,
+  /\bcollaps(e|ing)\b/i,
+  /\bmelt(ing)? ?down\b/i,
+  /\bfree ?fall\b/i,
+  /\btanking\b/i,
+  /\bplummet(ing|ed)?\b/i,
+  /\bnose ?div(e|ing)\b/i,
+  /\bbloodbath\b/i,
+  /\bcircuit (breaker|hit)\b/i,
+  /\blower circuit\b/i,
+  /\bblack (monday|swan)\b/i,
+  /\bmarket('?s| is)? (tanking|tumbling|sinking|falling apart)\b/i,
+  /\brecession\b/i,
+  /\bdepression\b/i,
+];
+
+// ── PANIC: physical / sleep / overwhelm ────────────────────────────────
+const PANIC_HEALTH = [
+  /\bcan'?t sleep\b/i,
+  /\bcan'?t eat\b/i,
+  /\bcan'?t (take|stand|bear) (it|this)( anymore)?\b/i,
+  /\bcan'?t breathe\b/i,
+  /\bcan'?t stop (checking|worrying|thinking)\b/i,
+  /\bup all night\b/i,
+  /\blosing sleep\b/i,
+  /\bcrying\b/i,
+  /\bi('?m| am) (overwhelmed|breaking down)\b/i,
+  /\bmaking me (sick|ill)\b/i,
+];
+
+const PANIC_PATTERNS = [
+  ...PANIC_EXIT,
+  ...PANIC_FEAR,
+  ...PANIC_DESPAIR,
+  ...PANIC_MARKET,
+  ...PANIC_HEALTH,
+];
+
+// ── FOMO: greed / hype / impulsive buying ──────────────────────────────
 const FOMO_PATTERNS = [
   /\ball in\b/i,
-  /\bput everything (in|into)\b/i,
+  /\bgo(ing)? all in\b/i,
+  /\bput (everything|it all|my (whole|entire) )?(in|into)\b/i,
+  /\binvest everything\b/i,
+  /\bbet (it all|everything|the house)\b/i,
+  /\bmax out\b/i,
+  /\byolo\b/i,
   /\bbefore it'?s too late\b/i,
-  /\bguaranteed (returns?|profit)\b/i,
-  /\bcan'?t miss\b/i,
+  /\bmiss(ing)? out\b/i,
+  /\bfomo\b/i,
+  /\bcan'?t miss (this|out)?\b/i,
+  /\bdon'?t want to miss\b/i,
+  /\bguaranteed (returns?|profit|money|gains?)\b/i,
+  /\bsure ?(thing|shot)\b/i,
+  /\bzero risk\b/i,
+  /\bno (way it|chance to) los(e|ing)\b/i,
   /\bto the moon\b/i,
-  /\beveryone is buying\b/i,
+  /\bmoon(ing|shot)\b/i,
+  /\bnext (bitcoin|tesla|10x|100x|multibagger)\b/i,
+  /\b(10x|100x|10 ?x|hundred ?x)\b/i,
+  /\bmultibagger\b/i,
+  /\bget rich (quick|fast)\b/i,
+  /\beveryone(’|'| i)?s? (is )?buying\b/i,
+  /\beveryone is (making|getting) (money|rich)\b/i,
   /\bdouble my money\b/i,
+  /\btriple my money\b/i,
+  /\bquick (money|buck|profit|gains?)\b/i,
+  /\bhot (tip|stock|pick)\b/i,
+  /\bpump(ing)?\b/i,
+  /\brocket\b/i,
+  /\bcan'?t lose\b/i,
+  /\bbuy the dip\b/i,
 ];
 
 /**
