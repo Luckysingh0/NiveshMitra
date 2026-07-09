@@ -42,9 +42,10 @@ router.post("/", async (req, res) => {
 
     const user = await getUser(email);
 
-    const conversation = conversationId
-      ? await getConversation(email, conversationId)
-      : await createConversation(email, message);
+    const conversation =
+      conversationId !== ""
+        ? await getConversation(conversationId)
+        : await createConversation(email, message);
 
     const newConversationId = conversation._id.toString();
 
