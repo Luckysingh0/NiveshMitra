@@ -10,12 +10,13 @@ import {
 const router = express.Router();
 
 // GET /api/plan/:sessionId  -> current plan (builds on the fly if profile ready)
-router.get("/:sessionId", async (req, res) => {
+router.get("/:conversationId", async (req, res) => {
   try {
-    const { sessionId } = req.params;
-    let plan = await getPlan(sessionId);
+    const conversationId = req.params.conversationId;
+    let plan = await getPlan(conversationId);
+
     if (!plan) {
-      const profile = await getProfile(sessionId);
+      const profile = await getProfile(conversationId);
       if (isProfileComplete(profile)) {
         if (profile.riskScore == null) {
           profile.riskScore = computeRiskScore(profile);
