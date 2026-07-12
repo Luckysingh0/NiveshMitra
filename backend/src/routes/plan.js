@@ -22,14 +22,10 @@ router.get("/:conversationId", async (req, res) => {
           profile.riskScore = computeRiskScore(profile);
           profile.riskCategory = categorize(profile.riskScore);
         }
-        plan = buildPlan(profile);
       }
+      plan = buildPlan(profile);
     }
-    if (!plan) {
-      return res
-        .status(404)
-        .json({ error: "No plan yet — finish onboarding first." });
-    }
+
     res.json({ plan });
   } catch (err) {
     console.error("plan route error:", err);

@@ -207,6 +207,16 @@ router.get("/:slug", async (req, res) => {
   }
 });
 
+router.delete("/", async (req, res) => {
+  const { conversationId } = req.body;
+
+  try {
+    await ConversationLog.findByIdAndDelete(conversationId);
+  } catch (err) {
+    console.error(err);
+  }
+});
+
 function serializeProfile(p) {
   return {
     goals: p.goals || [],
